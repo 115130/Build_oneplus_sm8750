@@ -321,7 +321,18 @@ jobs:
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
 
-
+      - name: 🚑 Fix SUSFS compilation error (修复 task_mmu.c 报错)
+        run: |
+          echo "正在修复 fs/proc/task_mmu.c 缺少 vma 变量定义的问题..."
+          cd kernel_workspace/common
+          
+          # 解释：sed 会找到 'map_files_get_link' 函数定义的那一行
+          # 然后在它下面强行插入一行 'struct vm_area_struct *vma;'
+          # 这样编译器就认识 vma 是谁了！
+          sed -i "/static const char \*map_files_get_link/a \\\tstruct vm_area_struct *vma;" fs/proc/task_mmu.c
+          
+          echo "修复完成！检查一下文件内容："
+          grep -A 3 "map_files_get_link" fs/proc/task_mmu.c
 
           
       - name: 🔧 Set gki_defconfig (设置编译配置) 
