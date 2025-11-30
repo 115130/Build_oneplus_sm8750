@@ -54,15 +54,15 @@ on:
       #   type: boolean
 
       enable_feature_b:
-         description: "选择网络调度"
-         required: false
-         type: choice
-         options:
+          description: "选择网络调度"
+          required: false
+          type: choice
+          options:
             - 'FQ_CODEL'
             - 'BBR'
-         default: 'FQ_CODEL'
+          default: 'FQ_CODEL'
       
-       
+        
 
 
 jobs:
@@ -70,7 +70,7 @@ jobs:
     name: Build_${{ github.event.inputs.DEVICES_NAME }}
     runs-on: ubuntu-latest
     env:
-      DEVICES_NAME:          ${{ github.event.inputs.DEVICES_NAME }}
+      DEVICES_NAME:           ${{ github.event.inputs.DEVICES_NAME }}
       KEEP_ORIGINAL_SETTINGS: ${{ github.event.inputs.keep_original_settings }}
       CUSTOM_KERNEL_SUFFIX:   ${{ github.event.inputs.custom_kernel_suffix }}
       CUSTOM_KERNEL_TIME:     ${{ github.event.inputs.custom_kernel_time }}
@@ -180,7 +180,19 @@ jobs:
             aria2c -s16 -x16 -k1M https://github.com/realme-kernel-opensource/realme_GT7pro-AndroidB-common-source/archive/refs/heads/master.zip -o common.zip
             unzip -q common.zip && 
             mv "realme_GT7pro-AndroidB-common-source-master" common
-          elif [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ] || [ "${DEVICES_NAME}" = "realme_GT7" ]; then
+            
+          # === 👇 这里是为你修改的部分，专门处理 realme_GT7 👇 ===
+          elif [ "${DEVICES_NAME}" = "realme_GT7" ]; then
+            echo "🚀 正在从你的专属仓库拉取 v6.6.66-stable 分支源码..."
+            aria2c -s16 -x16 -k1M https://github.com/115130/android_kernel_oneplus_mt6991/archive/refs/heads/v6.6.66-stable.zip -o common.zip
+            unzip -q common.zip && 
+            rm -rf common.zip
+            # 使用通配符匹配你的仓库名，无论解压出什么文件夹都改名为 common
+            mv android_kernel_oneplus_mt6991* common
+          # === 👆 修改结束 👆 ===
+
+          # 👇 这里去掉了 realme_GT7，只保留 ace5_ultra 走官方通道
+          elif [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ]; then
             aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
             unzip -q common.zip && 
             mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
@@ -189,6 +201,7 @@ jobs:
             unzip -q common.zip && 
             mv "android_kernel_common_oneplus_sm8750-oneplus-${REPO_MANIFEST}" common
           fi
+          
           rm -rf common.zip 
           echo "正在克隆llvm-clang18工具链..."
           mkdir -p clang18 &&
@@ -253,7 +266,7 @@ jobs:
             echo "ccache缓存命中详情:"
             ccache -sv
           fi
-         
+          
       - name: 🔧 apply lz4 1.10.0 & zstd 1.5.7 patches (添加lz4 1.10.0 & zstd 1.5.7补丁)
         run: |
           echo "正在添加lz4 1.10.0 & zstd 1.5.7补丁…"
@@ -487,5 +500,5 @@ jobs:
       - name: 📤 Upload AnyKernel3 (上传 Anykernel3)
         uses: actions/upload-artifact@v4
         with:
-         name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
-         path: ./AnyKernel3/*
+          name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
+          path: ./AnyKernel3/*
