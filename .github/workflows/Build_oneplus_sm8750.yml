@@ -1,4 +1,4 @@
-name: Build_Realme_GT7_Custom
+name: Build_Realme_GT7_Final
 on:
   workflow_dispatch:
     inputs:
@@ -27,7 +27,7 @@ on:
         default: ''
 
       enable_feature_a:
-        description: "🛡️ 开启 BBG 基带守护 (防止掉基带)"
+        description: "🛡️ 开启 BBG 基带守护"
         required: false
         default: true
         type: boolean
@@ -43,7 +43,7 @@ on:
 
 jobs:
   build:
-    name: Build_Kernel_For_GT7
+    name: Build_Kernel_GT7_Final
     runs-on: ubuntu-latest
     env:
       DEVICES_NAME:           ${{ github.event.inputs.DEVICES_NAME }}
@@ -57,12 +57,10 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: ⚙️ Set Variables (设置环境变量)
+      - name: ⚙️ Set Variables
         run: |
-          # 设置默认后缀和时间
           if [ "${{ env.KEEP_ORIGINAL_SETTINGS }}" = "true" ] && [ -z "${{ github.event.inputs.custom_kernel_suffix }}" ]; then
              echo 'DEFAULT_SUFFIX=-android15-8-gki-4k' >> $GITHUB_ENV
-             echo "使用默认后缀"
           else
             echo "DEFAULT_SUFFIX=${{ github.event.inputs.custom_kernel_suffix }}" >> $GITHUB_ENV
           fi
@@ -73,24 +71,20 @@ jobs:
             echo "KERNEL_TIME=${{ github.event.inputs.custom_kernel_time }}" >> $GITHUB_ENV
           fi
 
-      - name: 🛠 Install dependencies & Source (环境安装与源码拉取)
+      - name: 🛠 Install dependencies & Source
         run: |
           rm -rf kernel_workspace
           mkdir kernel_workspace
           cd kernel_workspace
           
-          echo "📦 安装编译依赖..."
+          echo "📦 安装依赖..."
           sudo apt update && sudo apt-get install -y --no-install-recommends binutils python-is-python3 libssl-dev libelf-dev dos2unix ccache p7zip-full &
           
-          echo "🚀 正在从你的 Fork 仓库拉取 v6.6.66-stable 分支..."
-          # 直接拉取你指定的 Fork 仓库的 ZIP 包
+          echo "🚀 拉取 v6.6.66-stable 分支..."
           aria2c -s16 -x16 -k1M https://github.com/115130/android_kernel_oneplus_mt6991/archive/refs/heads/v6.6.66-stable.zip -o common.zip
-          
-          # 解压并重命名为 common
           unzip -q common.zip && rm -rf common.zip
           mv android_kernel_oneplus_mt6991* common
           
-          # 下载工具链 (Clang 18)
           echo "🔧 下载工具链..."
           mkdir -p clang18
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/clang-r510928.zip -o clang.zip
@@ -98,25 +92,22 @@ jobs:
           aria2c -s16 -x16 -k1M https://github.com/cctv18/oneplus_sm8650_toolchain/releases/download/LLVM-Clang18-r510928/build-tools.zip -o build-tools.zip
           unzip -q build-tools.zip && rm -rf build-tools.zip
           
-          echo "🧹 清理 dirty 后缀..."
+          echo "🧹 清理..."
           for f in common/scripts/setlocalversion; do
             sed -i 's/ -dirty//g' "$f"
           done
           
-      - name: 🛠 Set ccache (设置缓存)
+      - name: 🛠 Set ccache
         run: |
           echo "CCACHE_DIR=$HOME/.ccache_${{ env.DEVICES_NAME }}" >> $GITHUB_ENV
           echo "CCACHE_MAXSIZE=3G" >> $GITHUB_ENV
           mkdir -p "$HOME/.ccache_${{ env.DEVICES_NAME }}"
-
-      - name: 📥 Init ccache (初始化缓存)
-        run: |
-          export CCACHE_DIR="${{ env.CCACHE_DIR }}"
+          export CCACHE_DIR="$HOME/.ccache_${{ env.DEVICES_NAME }}"
           export CCACHE_MAXSIZE="3G"
           ccache -M "3G"
           ccache -o compression=true
           
-      - name: 🔧 Apply Lz4 & Zstd patches (基础压缩算法补丁)
+      - name: 🔧 Apply Lz4 & Zstd patches
         run: |
           cd kernel_workspace
           git clone https://github.com/cctv18/oppo_oplus_realme_sm8750.git
@@ -127,14 +118,14 @@ jobs:
           git apply -p1 < 001-lz4.patch || true
           patch -p1 < 002-zstd.patch || true
           
-      - name: 🛡️ Set Baseband-guard (BBG 基带守护)
+      - name: 🛡️ Set Baseband-guard
         if: ${{ env.ENABLE_FEATURE_A == 'true' }}
         run: |
           cd kernel_workspace/common
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./security/Kconfig
 
-      - name: ⚙️ Set SuKiSU Ultra (KernelSU 魔改版)
+      - name: ⚙️ Set SuKiSU Ultra
         run: |
           set -e
           cd kernel_workspace
@@ -147,7 +138,7 @@ jobs:
           chmod +x setup.bin
           ./setup.bin
 
-      - name: 👻 Set up SUSFS (隐身补丁)
+      - name: 👻 Set up SUSFS
         run: |
           cd kernel_workspace
           git clone https://github.com/ShirkNeko/susfs4ksu.git -b gki-android15-6.6
@@ -159,22 +150,23 @@ jobs:
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
 
-      # 👇👇👇 关键修复：解决 task_mmu.c 编译报错 👇👇👇
-      - name: 🚑 Fix SUSFS compilation error (通过 mm 变量定位)
+      # 👇👇👇 这里的逻辑改为了定位 start_vaddr，绝不会误伤！ 👇👇👇
+      - name: 🚑 Fix SUSFS compilation error (Final Sniper)
         run: |
           cd kernel_workspace/common
-          echo "🔍 正在修复 vma 变量未定义的问题..."
+          echo "🔍 正在通过 start_vaddr 变量精准定位..."
           
-          # 在 'struct mm_struct *mm;' 下面添加 'struct vm_area_struct *vma;'
-          sed -i "/struct mm_struct \*mm;/a \\\tstruct vm_area_struct *vma;" fs/proc/task_mmu.c
+          # 解释：找到 'unsigned long start_vaddr' 这一行
+          # (a = append after) 在它下面添加 'struct vm_area_struct *vma;'
+          # 这个变量通常只在报错的那个函数里出现，所以很安全！
+          sed -i "/unsigned long start_vaddr/a \\\tstruct vm_area_struct *vma;" fs/proc/task_mmu.c
           
-          echo "✅ 修复完成，检查结果："
+          echo "✅ 修复完成，检查："
           grep -C 2 "struct vm_area_struct \*vma;" fs/proc/task_mmu.c || true
 
-      - name: 🔧 Set gki_defconfig (写入配置)
+      - name: 🔧 Set gki_defconfig
         run: |
           cd kernel_workspace
-          # 添加 KSU 和 SUSFS 配置
           echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KPM=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
@@ -193,25 +185,21 @@ jobs:
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_SUS_MAP=y" >> ./common/arch/arm64/configs/gki_defconfig
           
-          # 网络调度 BBR
           if [ "${{ env.ENABLE_FEATURE_B }}" = "BBR" ]; then
             echo "CONFIG_TCP_CONG_BBR=y" >> ./common/arch/arm64/configs/gki_defconfig
             echo "CONFIG_DEFAULT_TCP_CONG=bbr" >> ./common/arch/arm64/configs/gki_defconfig
           fi
           
-          # 移除 check_defconfig 检查
           sudo sed -i 's/check_defconfig//' ./common/build.config.gki
 
-      - name: 🔧 Set Kernel name (修改内核名)
+      - name: 🔧 Set Kernel name
         run: |
           cd kernel_workspace
           ESCAPED_SUFFIX=$(printf '%s\n' "$DEFAULT_SUFFIX" | sed 's:[\/&]:\\&:g')
           sudo sed -i "s/-4k/$ESCAPED_SUFFIX/g" ./common/arch/arm64/configs/gki_defconfig
           sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
           
-      # ⚠️ 注意：这里彻底删除了 Apply Sched Patch 步骤，不再打风驰补丁
-
-      - name: 🔨 Build Kernel (开始编译)
+      - name: 🔨 Build Kernel
         run: |
           WORKDIR="$(pwd)"
           export PATH="/usr/lib/ccache:$PATH"
@@ -226,14 +214,14 @@ jobs:
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD="ld.lld" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error gki_defconfig
           make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC="ccache clang" LD="ld.lld" HOSTLD=ld.lld O=out KCFLAGS+=-O2 KCFLAGS+=-Wno-error Image
           
-      - name: 📦 Make AnyKernel3 (打包)
+      - name: 📦 Make AnyKernel3
         run: |
           cp "${GITHUB_WORKSPACE}/.github/workflows/Bin/main.bin" ./
           chmod +x main.bin
           ./main.bin "make_anykernel3"
           rm -rf ./main.bin
           
-      - name: 📤 Upload AnyKernel3 (上传成品)
+      - name: 📤 Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
           name: AK3_${{ env.KSUVER }}_${{ env.DEVICES_NAME }}_SuKiSU
