@@ -193,7 +193,7 @@ jobs:
 
           # 👇 这里去掉了 realme_GT7，只保留 ace5_ultra 走官方通道
           elif [ "${DEVICES_NAME}" = "oneplus_ace5_ultra" ]; then
-            aria2c -s16 -x16 -k1M https://github.com/OnePlusOSS/android_kernel_oneplus_mt6991/archive/refs/heads/oneplus/${REPO_MANIFEST}.zip -o common.zip
+            aria2c -s16 -x16 -k1M https://github.com/115130/android_kernel_oneplus_mt6991/archive/refs/heads/v6.6.66-stable.zip -o common.zip
             unzip -q common.zip && 
             mv "android_kernel_oneplus_mt6991-oneplus-${REPO_MANIFEST}" common
           else
