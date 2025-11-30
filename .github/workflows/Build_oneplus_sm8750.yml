@@ -321,19 +321,19 @@ jobs:
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-android15-6.6.patch || true
 
-      - name: 🚑 Fix SUSFS compilation error (Retry)
+      - name: 🚑 Fix SUSFS compilation error (Final)
         run: |
           cd kernel_workspace/common
-          echo "🔍 正在定位报错的具体代码行..."
+          echo "🔍 正在进行第三次尝试：利用 mm 变量定位..."
           
-          # 方案升级：不找函数名了，直接找报错的那一行代码！
-          # 在 'vma = find_vma' 这一行的 上面 (i = insert before) 插入变量定义
-          sed -i "/vma = find_vma/i \\\tstruct vm_area_struct *vma;" fs/proc/task_mmu.c
+          # 策略：找到 'struct mm_struct *mm;' 这一行
+          # (a = append after) 在它下面添加 'struct vm_area_struct *vma;'
+          # 这样绝对不会错，因为同一个函数里肯定得先定义 mm 才能用！
+          sed -i "/struct mm_struct \*mm;/a \\\tstruct vm_area_struct *vma;" fs/proc/task_mmu.c
           
-          echo "✅ 修复命令已执行，正在验证..."
-          # 打印一下那一行代码的前后文，看看插进去了没有
-          # 加上 || true 防止 grep 没找到时直接把工作流杀掉，让我们能看到输出
-          grep -C 3 "struct vm_area_struct \*vma;" fs/proc/task_mmu.c || true
+          echo "✅ 修复命令已执行，验证是否成功插入："
+          # 打印一下，看看 vma 是不是乖乖待在 mm 下面了
+          grep -C 2 "struct vm_area_struct \*vma;" fs/proc/task_mmu.c || true
 
           
       - name: 🔧 Set gki_defconfig (设置编译配置) 
